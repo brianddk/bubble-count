@@ -1,0 +1,23 @@
+{
+  "name": "bubble-count",
+  "version": "0.1.0",
+  "description": "Count the number of bitcoin bubbles given a desired threshold",
+  "main": "bubble-count.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brianddk/bubble-count.git"
+  },
+  "keywords": [
+    "npm"
+  ],
+  "author": "brianddk",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.2",
+    "request": "^2.83.0",
+    "request-promise": "^4.2.2"
+  }
+}
