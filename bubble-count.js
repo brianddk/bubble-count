@@ -29,7 +29,7 @@ function jsonReq(url, bParse) {
 } 
 
 function findBubble(history, indicator) {
-    var ringer = {date: new Date('12/22/2017'), price: 10400.00};
+    // var ringer = {date: new Date('1/17/2018'), price: 9017.41};
     var atl = {date: "", price: 0};
     var ath = {date: "", price: 0};
     var inBubble = true;
@@ -42,7 +42,7 @@ function findBubble(history, indicator) {
         var theEnd = false;
         current.date  = new Date(history[i][0]);
         current.price = history[i][1];
-        var delta = current.date - ringer.date;
+        var delta = typeof(ringer) === 'undefined' ? 0 : current.date - ringer.date;
         var oneDay = 24*60*60*1000;
         if(delta > 0 && delta < oneDay ) {
             current.price = ringer.price;
@@ -101,6 +101,6 @@ jsonReq('https://99bitcoins.com/price-chart-history/', false)
             eval(js);
             pricedata = chartdata;
         });
-        findBubble(pricedata.price, 0.05);
+        findBubble(pricedata.price, 0.45);
         // console.log(pricedata.price);
     });
