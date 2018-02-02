@@ -30,8 +30,6 @@ function jsonReq(url, bParse) {
 
 function findBubble(history, indicator) {
     // var ringer = {date: new Date('1/17/2018'), price: 9017.41};
-    var atl = {date: "", price: 0};
-    var ath = {date: "", price: 0};
     var inBubble = true;
     var badInvest = 1.0;
     var goodInvest = 5;
@@ -41,19 +39,25 @@ function findBubble(history, indicator) {
         var current = {};
         var theEnd = false;
         current.date  = new Date(history[i][0]);
-        current.price = history[i][1];
-        var delta = typeof(ringer) === 'undefined' ? 0 : current.date - ringer.date;
-        var oneDay = 24*60*60*1000;
-        if(delta > 0 && delta < oneDay ) {
-            current.price = ringer.price;
+        current.low = history[i][1];
+        current.high = history[i][1];
+        if(i == 0) {
+            atl = current;
+            ath = current;
         }
+        // var delta = typeof(ringer) === 'undefined' ? 0 : current.date - ringer.date;
+        // var oneDay = 24*60*60*1000;
+        // if(delta > 0 && delta < oneDay ) {
+            // current.price = ringer.price;
+        // }
         if(inBubble) {
-            if(current.price <= ath.price * (1 - indicator)) {
+            if(current.low <= ath.low * (1 - indicator)) {
                 inBubble = false;
                 atl = current;
-            }            
+            }
+            else;
         } else {
-            if(current.price < atl.price) {
+            if(current.low < atl.low) {
                 atl = current;
             }
         }
@@ -62,30 +66,33 @@ function findBubble(history, indicator) {
             theEnd = true;
         }
         
-        if(current.price > ath.price || theEnd) {
+        if(current.high > ath.high || theEnd) {
             if(!inBubble) {
-                var drop = 100 - (atl.price / ath.price)*100;
+                var drop = 100 - (atl.low / ath.high)*100;
                 var dropMsg = numberWithCommas((current.date.getTime() - ath.date.getTime()) / (1000*60*60*24*30.5), 2) + " mo|"
                 if (theEnd) { dropMsg = "NA|" }
-                var msg = "ATH = " + ath.price + " @ " + usDateFormat(ath.date);
-                msg += "\nATL = " + atl.price + " @ " + usDateFormat(atl.date);
+                var msg = "ATH = " + ath.high + " @ " + usDateFormat(ath.date);
+                msg += "\nATL = " + atl.low + " @ " + usDateFormat(atl.date);
                 msg += "\nDROP = " + drop.toFixed(2) + " %";
-                msg = "|$"+ numberWithCommas(ath.price, 2) +"|"+ usDateFormat(ath.date) +"|$"+ 
-                      numberWithCommas(atl.price, 2) +"|"+ usDateFormat(atl.date) +"|"+ drop.toFixed(2) +"%|" + 
+                msg = "|$"+ numberWithCommas(ath.high, 2) +"|"+ usDateFormat(ath.date) +"|$"+ 
+                      numberWithCommas(atl.low, 2) +"|"+ usDateFormat(atl.date) +"|"+ drop.toFixed(2) +"%|" + 
                       dropMsg;
                 console.log(msg);
                 badInvest *= (1-drop/100);
                 goodInvest *= 1/(1-drop/100);
             }
-            if(current.price > ath.price) {
+            if(current.high > ath.high) {
                 ath = current;
                 inBubble = true;
             }
         }
     }
-    console.log("ATH $" + ath.price + " @ " + usDateFormat(ath.date));
+    console.log("ATH $" + numberWithCommas(ath.high, 2) + " @ " + usDateFormat(ath.date));
     console.log("1 MIL USD invested poorly (buy top / sell bottom) = $" + numberWithCommas(badInvest * 1000 * 1000, 2));
-    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) invested wisely (sell top / buy bottom) = $" + numberWithCommas(goodInvest * ath.price, 2));
+    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) HODL'd till last dip = $" + 
+                numberWithCommas(5 * atl.low, 2));
+    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) invested wisely (sell top / buy bottom) = $" + 
+                numberWithCommas(goodInvest * ath.high, 2));
 }
 
 jsonReq('https://99bitcoins.com/price-chart-history/', false)
@@ -99,8 +106,24 @@ jsonReq('https://99bitcoins.com/price-chart-history/', false)
                 return;
             } 
             eval(js);
-            pricedata = chartdata;
+            pricedata = chartdata.price;
         });
-        findBubble(pricedata.price, 0.45);
-        // console.log(pricedata.price);
+        jsonReq('https://api.gdax.com/products/BTC-USD/candles?granularity=86400', true)
+            .then(function(gdax){
+                for(var i in gdax){
+                    if(gdax[i][0] == 1492214400) {
+                        gdax[i][1] = gdax[i][3];
+                    }
+                    gdax[i][0] *= 1000;
+                }
+                for(var i in pricedata) {
+                    var price = pricedata[i][1];
+                    pricedata[i].push(price);
+                    gdax.push(pricedata[i])
+                }
+                gdax.sort(function(a, b){
+                    return a[0] - b[0]
+                });
+                findBubble(gdax, 0.45);                
+            });
     });
