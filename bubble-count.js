@@ -9,6 +9,12 @@ var cheerio = require('cheerio')
 // Globals (parameterize later).
 var bMarkdown = true;; // else CSV
 var bTruncate = true;; // only list < $1
+var step = 340*86400*1000;
+// var start = 1417392000; //opening day
+var start = 1421301600; //stable day
+// var start = 1495411200;
+var pct = 0.45;
+
 
 const numberWithCommas = (x, n) => {
     return x.toFixed(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -26,16 +32,29 @@ function jsonReq(url, bParse) {
         },
         json: bParse
     });
-} 
+}
+
+function fetchGdax(head, start) {
+    var uri = "https://api.gdax.com/products/BTC-USD/candles?granularity=86400";
+    var end = start + step;
+    uri += "&start=" + new Date(start).toISOString();
+    uri += "&end="  + new Date(end).toISOString();
+    return head
+        .then(function(prev){
+            return jsonReq(uri, true)
+                .then(function(cur){
+                    return prev.concat(cur);
+                });
+        });
+}
+
 
 function findBubble(history, indicator) {
-    // var ringer = {date: new Date('1/17/2018'), price: 9017.41};
     var inBubble = true;
     var badInvest = 1.0;
     var goodInvest = 5;
     //http://web.archive.org/web/20100703032414/http://freebitcoins.appspot.com/
     for(var i in history) {
-        // if (i > 100) {continue;}
         var current = {};
         var theEnd = false;
         current.date  = new Date(history[i][0]);
@@ -45,11 +64,6 @@ function findBubble(history, indicator) {
             atl = current;
             ath = current;
         }
-        // var delta = typeof(ringer) === 'undefined' ? 0 : current.date - ringer.date;
-        // var oneDay = 24*60*60*1000;
-        // if(delta > 0 && delta < oneDay ) {
-            // current.price = ringer.price;
-        // }
         if(inBubble) {
             if(current.low <= ath.low * (1 - indicator)) {
                 inBubble = false;
@@ -61,11 +75,11 @@ function findBubble(history, indicator) {
                 atl = current;
             }
         }
-        
+
         if(Number(i)+1 == history.length) {
             theEnd = true;
         }
-        
+
         if(current.high > ath.high || theEnd) {
             if(!inBubble) {
                 var drop = 100 - (atl.low / ath.high)*100;
@@ -74,8 +88,8 @@ function findBubble(history, indicator) {
                 var msg = "ATH = " + ath.high + " @ " + usDateFormat(ath.date);
                 msg += "\nATL = " + atl.low + " @ " + usDateFormat(atl.date);
                 msg += "\nDROP = " + drop.toFixed(2) + " %";
-                msg = "|$"+ numberWithCommas(ath.high, 2) +"|"+ usDateFormat(ath.date) +"|$"+ 
-                      numberWithCommas(atl.low, 2) +"|"+ usDateFormat(atl.date) +"|"+ drop.toFixed(2) +"%|" + 
+                msg = "|$"+ numberWithCommas(ath.high, 2) +"|"+ usDateFormat(ath.date) +"|$"+
+                      numberWithCommas(atl.low, 2) +"|"+ usDateFormat(atl.date) +"|"+ drop.toFixed(2) +"%|" +
                       dropMsg;
                 console.log(msg);
                 badInvest *= (1-drop/100);
@@ -89,13 +103,13 @@ function findBubble(history, indicator) {
     }
     console.log("ATH $" + numberWithCommas(ath.high, 2) + " @ " + usDateFormat(ath.date));
     console.log("1 MIL USD invested poorly (buy top / sell bottom) = $" + numberWithCommas(badInvest * 1000 * 1000, 2));
-    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) HODL'd till last dip = $" + 
+    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) HODL'd till last dip = $" +
                 numberWithCommas(5 * atl.low, 2));
-    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) invested wisely (sell top / buy bottom) = $" + 
+    console.log("5 BTC from an [early faucet](http://web.archive.org/web/1/http://freebitcoins.appspot.com/) invested wisely (sell top / buy bottom) = $" +
                 numberWithCommas(goodInvest * ath.high, 2));
 }
 
-jsonReq('https://99bitcoins.com/price-chart-history/', false)
+var head = jsonReq('https://99bitcoins.com/price-chart-history/', false)
     .then(function (historyHtml) {
         var $ = cheerio.load(historyHtml);
         var $scripts = $("script");
@@ -104,26 +118,38 @@ jsonReq('https://99bitcoins.com/price-chart-history/', false)
             var js = $(this).html();
             if(0 > js.indexOf("var chartdata =")) {
                 return;
-            } 
+            }
             eval(js);
             pricedata = chartdata.price;
         });
-        jsonReq('https://api.gdax.com/products/BTC-USD/candles?granularity=86400', true)
-            .then(function(gdax){
-                for(var i in gdax){
-                    if(gdax[i][0] == 1492214400) {
-                        gdax[i][1] = gdax[i][3];
-                    }
-                    gdax[i][0] *= 1000;
-                }
-                for(var i in pricedata) {
-                    var price = pricedata[i][1];
-                    pricedata[i].push(price);
-                    gdax.push(pricedata[i])
-                }
-                gdax.sort(function(a, b){
-                    return a[0] - b[0]
-                });
-                findBubble(gdax, 0.45);                
-            });
+        for(var i in pricedata) {
+            var price = pricedata[i][1];
+            pricedata[i].push(price);
+        }
+        return pricedata;
     });
+
+for(var i=start * 1000; i < new Date().getTime(); i += step) {
+    head = fetchGdax(head, i);
+}
+
+head
+    .then(function(gdax){
+        for(var i in gdax){
+            if(gdax[i][0] == 1492214400) {
+                gdax[i][1] = gdax[i][3];
+            }
+            if(gdax[i][0] < 1123456790000) {
+                gdax[i][0] *= 1000;
+            }
+        }
+
+        gdax.sort(function(a, b){
+            return a[0] - b[0]
+        });
+        if (process.argv.length > 2) pct = process.argv[2] / 100;
+        findBubble(gdax, pct);
+    });
+
+//1417392000 start
+//1495411200 fake start
