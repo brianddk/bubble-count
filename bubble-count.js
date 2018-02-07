@@ -4,17 +4,17 @@
 // [tips]    LTC: LQjSwZLigtgqHA3rE14yeRNbNNY2r3tXcA
 //
 var rp = require('request-promise');
-var cheerio = require('cheerio')
+var fs = require('fs');
+var earlyA = require('./99bitcoins.json');
+var cmcA = require('./cmc.json');
 
 // Globals (parameterize later).
 var bMarkdown = true;; // else CSV
 var bTruncate = true;; // only list < $1
-var step = 340*86400*1000;
-// var start = 1417392000; //opening day
-var start = 1421301600; //stable day
-// var start = 1495411200;
+var step = 1000*340*86400;
+var start = cmcA.slice(-1)[0][0];
 var pct = 0.45;
-
+var head;
 
 const numberWithCommas = (x, n) => {
     return x.toFixed(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -36,16 +36,21 @@ function jsonReq(url, bParse) {
 
 function fetchGdax(head, start) {
     var uri = "https://api.gdax.com/products/BTC-USD/candles?granularity=86400";
-    var end = start + step;
+    var end = Math.min(start + step, new Date().getTime()-12345); // 12 sec delay
     uri += "&start=" + new Date(start).toISOString();
     uri += "&end="  + new Date(end).toISOString();
-    return head
-        .then(function(prev){
-            return jsonReq(uri, true)
-                .then(function(cur){
-                    return prev.concat(cur);
-                });
-        });
+    if(head) {
+        return head
+            .then(function(prev){
+                return jsonReq(uri, true)
+                    .then(function(cur){
+                        return prev.concat(cur);
+                    });
+            });
+    }
+    else {
+        return jsonReq(uri, true);
+    }
 }
 
 
@@ -59,13 +64,13 @@ function findBubble(history, indicator) {
         var theEnd = false;
         current.date  = new Date(history[i][0]);
         current.low = history[i][1];
-        current.high = history[i][1];
+        current.high = history[i][2];
         if(i == 0) {
             atl = current;
             ath = current;
         }
         if(inBubble) {
-            if(current.low <= ath.low * (1 - indicator)) {
+            if(current.low <= ath.high * (1 - indicator)) {
                 inBubble = false;
                 atl = current;
             }
@@ -85,12 +90,13 @@ function findBubble(history, indicator) {
                 var drop = 100 - (atl.low / ath.high)*100;
                 var dropMsg = numberWithCommas((current.date.getTime() - ath.date.getTime()) / (1000*60*60*24*30.5), 2) + " mo|"
                 if (theEnd) { dropMsg = "NA|" }
-                var msg = "ATH = " + ath.high + " @ " + usDateFormat(ath.date);
-                msg += "\nATL = " + atl.low + " @ " + usDateFormat(atl.date);
-                msg += "\nDROP = " + drop.toFixed(2) + " %";
-                msg = "|$"+ numberWithCommas(ath.high, 2) +"|"+ usDateFormat(ath.date) +"|$"+
+                // var msg = "ATH = " + ath.high + " @ " + usDateFormat(ath.date);
+                // msg += "\nATL = " + atl.low + " @ " + usDateFormat(atl.date);
+                // msg += "\nDROP = " + drop.toFixed(2) + " %";
+                var msg = "|$"+ numberWithCommas(ath.high, 2) +"|"+ usDateFormat(ath.date) +"|$"+
                       numberWithCommas(atl.low, 2) +"|"+ usDateFormat(atl.date) +"|"+ drop.toFixed(2) +"%|" +
                       dropMsg;
+                // msg += numberWithCommas((atl.date.getTime() - ath.date.getTime()) / (1000*60*60), 2) + " hr|"
                 console.log(msg);
                 badInvest *= (1-drop/100);
                 goodInvest *= 1/(1-drop/100);
@@ -109,47 +115,22 @@ function findBubble(history, indicator) {
                 numberWithCommas(goodInvest * ath.high, 2));
 }
 
-var head = jsonReq('https://99bitcoins.com/price-chart-history/', false)
-    .then(function (historyHtml) {
-        var $ = cheerio.load(historyHtml);
-        var $scripts = $("script");
-        var pricedata = {};
-        $scripts.each(function (i) {
-            var js = $(this).html();
-            if(0 > js.indexOf("var chartdata =")) {
-                return;
-            }
-            eval(js);
-            pricedata = chartdata.price;
-        });
-        for(var i in pricedata) {
-            var price = pricedata[i][1];
-            pricedata[i].push(price);
-        }
-        return pricedata;
-    });
-
-for(var i=start * 1000; i < new Date().getTime(); i += step) {
+for(var i=start; i < new Date().getTime(); i += step) {
     head = fetchGdax(head, i);
 }
 
 head
     .then(function(gdax){
-        for(var i in gdax){
-            if(gdax[i][0] == 1492214400) {
-                gdax[i][1] = gdax[i][3];
-            }
-            if(gdax[i][0] < 1123456790000) {
-                gdax[i][0] *= 1000;
-            }
+        for(var i in gdax) {
+            gdax[i][0] *= 1000;
         }
-
-        gdax.sort(function(a, b){
-            return a[0] - b[0]
-        });
+        gdax = gdax.concat(earlyA).concat(cmcA);
+        for(var i in gdax){
+            gdax.sort(function(a, b){
+                return a[0] - b[0]
+            });
+        }
+        
         if (process.argv.length > 2) pct = process.argv[2] / 100;
         findBubble(gdax, pct);
     });
-
-//1417392000 start
-//1495411200 fake start
